@@ -34,6 +34,7 @@ import net.c5h8no4na.e621.api.response.partial.File;
 import net.c5h8no4na.e621.api.response.partial.Relationships;
 import net.c5h8no4na.e621.api.response.partial.Score;
 import net.c5h8no4na.e621.api.response.partial.Tags;
+import net.c5h8no4na.entity.e621.DestroyedPost;
 import net.c5h8no4na.entity.e621.Post;
 import net.c5h8no4na.entity.e621.PostFile;
 import net.c5h8no4na.entity.e621.Source;
@@ -76,8 +77,12 @@ public class Test {
 		}
 	}
 
+	private Boolean postIsDestroyed(Integer id) {
+		return em.find(DestroyedPost.class, id) != null;
+	}
+
 	private Post findOrCreatePost(Integer id) {
-		if (id == null) {
+		if (id == null || postIsDestroyed(id)) {
 			return null;
 		}
 		Post p = em.find(Post.class, id);
@@ -131,6 +136,11 @@ public class Test {
 				}
 				return dbPost;
 			} else {
+				if (response.getResponseCode() == 404) {
+					DestroyedPost dp = new DestroyedPost();
+					dp.setId(id);
+					em.persist(dp);
+				}
 				return null;
 			}
 
