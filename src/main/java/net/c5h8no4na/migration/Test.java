@@ -68,11 +68,11 @@ public class Test {
 		if (p == null) {
 			return Response.serverError().status(Status.NOT_FOUND).build();
 		}
-		PostFile pf = p.getPostFile();
-		if (pf == null) {
+		Optional<PostFile> pf = p.getPostFile();
+		if (pf.isEmpty()) {
 			return Response.serverError().status(Status.NOT_FOUND).build();
 		} else {
-			return Response.ok(pf.getFile()).type(p.getExtension().toMediaType()).build();
+			return Response.ok(pf.get().getFile()).type(p.getExtension().toMediaType()).build();
 		}
 	}
 
@@ -101,10 +101,12 @@ public class Test {
 				dbPost.setRating(Rating.from(post.getRating()).get());
 				dbPost.setFavCount(post.getFavCount());
 
-				dbPost.setApprover(findOrCreateUser(post.getApproverId()));
+				if (post.getApproverId().isPresent()) {
+					dbPost.setApprover(findOrCreateUser(post.getApproverId().get()));
+				}
 				dbPost.setUploader(findOrCreateUser(post.getUploaderId()));
 				dbPost.setDescription(post.getDescription());
-				dbPost.setDuration(post.getDuration());
+				dbPost.setDuration(post.getDuration().orElse(null));
 
 				em.persist(dbPost);
 				// File
@@ -122,7 +124,7 @@ public class Test {
 				List<Post> children = childIds.stream().map(childId -> findOrCreatePost(childId)).collect(Collectors.toList());
 				dbPost.setChildren(children);
 				// Parent
-				dbPost.setParent(findOrCreatePost(post.getRelationships().getParentId()));
+				dbPost.setParent(findOrCreatePost(post.getRelationships().getParentId().orElse(null)));
 				for (String source : post.getSources()) {
 					Source s = new Source();
 					s.setPost(dbPost);
@@ -140,9 +142,6 @@ public class Test {
 	}
 
 	private User findOrCreateUser(Integer id) {
-		if (id == null) {
-			return null;
-		}
 		User u = em.find(User.class, id);
 		if (u == null) {
 			E621Response<FullUserApi> response = client.getUserById(id);
@@ -154,8 +153,8 @@ public class Test {
 				dbUser.setName(user.getName());
 				dbUser.setLevel(Level.from(user.getLevel()).get());
 				dbUser.setIsBanned(user.getIsBanned());
-				dbUser.setAvatarId(user.getAvatarId());
 				em.persist(dbUser);
+				dbUser.setAvatar(findOrCreatePost(user.getAvatarId().orElse(null)));
 				return dbUser;
 			} else {
 				return null;
@@ -253,13 +252,13 @@ public class Test {
 
 		Relationships r = new Relationships();
 		r.setChildren(post.getChildren().stream().map(c -> c.getId()).collect(Collectors.toList()));
-		r.setParentId(post.getParent() != null ? post.getParent().getId() : null);
+		r.setParentId(post.getParent().isPresent() ? post.getParent().get().getId() : null);
 		p.setRelationships(r);
 
-		p.setApproverId(post.getApprover() != null ? post.getApprover().getId() : null);
+		p.setApproverId(post.getApprover().isPresent() ? post.getApprover().get().getId() : null);
 		p.setUploaderId(post.getUploader().getId());
 		p.setDescription(post.getDescription());
-		p.setDuration(post.getDuration());
+		p.setDuration(post.getDuration().orElse(null));
 		p.setSources(post.getSources().stream().map(source -> source.getSource()).collect(Collectors.toList()));
 
 		return p;
