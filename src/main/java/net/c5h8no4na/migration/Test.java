@@ -107,9 +107,9 @@ public class Test {
 				dbPost.setFavCount(post.getFavCount());
 
 				if (post.getApproverId().isPresent()) {
-					dbPost.setApprover(findOrCreateUser(post.getApproverId().get()));
+					dbPost.setApprover(findOrCreateUser(post.getApproverId().get(), dbPost));
 				}
-				dbPost.setUploader(findOrCreateUser(post.getUploaderId()));
+				dbPost.setUploader(findOrCreateUser(post.getUploaderId(), dbPost));
 				dbPost.setDescription(post.getDescription());
 				dbPost.setDuration(post.getDuration().orElse(null));
 
@@ -149,7 +149,7 @@ public class Test {
 		}
 	}
 
-	private User findOrCreateUser(Integer id) {
+	private User findOrCreateUser(Integer id, Post p) {
 		User u = em.find(User.class, id);
 		if (u == null) {
 			E621Response<FullUserApi> response = client.getUserById(id);
@@ -162,7 +162,9 @@ public class Test {
 				dbUser.setLevel(Level.from(user.getLevel()).get());
 				dbUser.setIsBanned(user.getIsBanned());
 				em.persist(dbUser);
-				dbUser.setAvatar(findOrCreatePost(user.getAvatarId().orElse(null)));
+				if (user.getAvatarId().isPresent()) {
+					dbUser.setAvatar(p.getId().equals(user.getAvatarId().get()) ? p : findOrCreatePost(user.getAvatarId().orElse(null)));
+				}
 				return dbUser;
 			} else {
 				return null;
