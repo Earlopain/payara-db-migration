@@ -123,8 +123,6 @@ public class Test {
 				List<Integer> childIds = post.getRelationships().getChildren();
 				List<Post> children = childIds.stream().map(childId -> findOrCreatePost(childId)).collect(Collectors.toList());
 				dbPost.setChildren(children);
-				// Parent
-				dbPost.setParent(findOrCreatePost(post.getRelationships().getParentId().orElse(null)));
 				for (String source : post.getSources()) {
 					Source s = new Source();
 					s.setPost(dbPost);
