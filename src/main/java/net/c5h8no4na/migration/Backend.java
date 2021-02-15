@@ -89,12 +89,12 @@ public class Backend {
 			dbPost.setFavCount(post.getFavCount());
 			dbPost.setDescription(post.getDescription());
 
-			// Why does it flush here?
 			em.persist(dbPost);
 			if (post.getApproverId().isPresent()) {
 				dbPost.setApprover(findOrCreateUser(post.getApproverId().get()));
 			}
 			dbPost.setUploader(findOrCreateUser(post.getUploaderId()));
+			Assert.notNull(dbPost.getUploader());
 			dbPost.setDuration(post.getDuration().orElse(null));
 
 			// File
