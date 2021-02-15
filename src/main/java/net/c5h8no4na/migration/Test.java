@@ -1,5 +1,10 @@
 package net.c5h8no4na.migration;
 
+import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URLConnection;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -48,6 +53,19 @@ public class Test {
 			return Response.serverError().status(Status.NOT_FOUND).build();
 		} else {
 			return Response.ok(file.get().x).type(file.get().y.toMediaType()).build();
+		}
+	}
+
+	@GET
+	@Path("/filemaria")
+	public Response getFileFromMariaDb(@QueryParam("id") Integer id) throws IOException {
+		Optional<byte[]> file = backend.getPostFromMariaDb(id);
+		if (file.isEmpty()) {
+			return Response.serverError().status(Status.NOT_FOUND).build();
+		} else {
+			InputStream is = new BufferedInputStream(new ByteArrayInputStream(file.get()));
+			String mimeType = URLConnection.guessContentTypeFromStream(is);
+			return Response.ok(file.get()).type(mimeType).build();
 		}
 	}
 

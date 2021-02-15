@@ -1,11 +1,16 @@
 package net.c5h8no4na.migration;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import javax.annotation.Resource;
 import javax.ejb.Stateless;
 import javax.persistence.EntityManager;
 import javax.persistence.PersistenceContext;
@@ -13,8 +18,10 @@ import javax.persistence.TypedQuery;
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
 import javax.persistence.criteria.Root;
+import javax.sql.DataSource;
 
 import net.c5h8no4na.common.Tuple;
+import net.c5h8no4na.common.assertion.Assert;
 import net.c5h8no4na.e621.api.E621Client;
 import net.c5h8no4na.e621.api.E621Response;
 import net.c5h8no4na.e621.api.response.FullUserApi;
@@ -37,6 +44,9 @@ public class Backend {
 
 	@PersistenceContext(unitName = "e621")
 	private EntityManager em;
+
+	@Resource(name = "jdbc/mariadb")
+	private DataSource mariaDb;
 
 	private E621Client client = new E621Client("earlopain/test");
 
@@ -62,6 +72,30 @@ public class Backend {
 			return Optional.empty();
 		}
 		return Optional.of(new Tuple<>(pf.get().getFile(), p.getExtension()));
+	}
+
+	public Optional<byte[]> getPostFromMariaDb(Integer id) {
+		try (Connection connection = mariaDb.getConnection();
+				PreparedStatement statement = connection.prepareStatement("SELECT file FROM posts WHERE id = ?")) {
+			statement.setInt(1, id);
+			ResultSet rs = statement.executeQuery();
+			if (rs.next()) {
+				byte[] file = rs.getBytes(1);
+				if (file == null) {
+					// Post is saved, but the file is not
+					return Optional.empty();
+				} else {
+					// Found the file
+					return Optional.of(file);
+				}
+			} else {
+				// Post not saved in db
+				return Optional.empty();
+			}
+		} catch (SQLException e) {
+			// Some other error
+			return Optional.empty();
+		}
 	}
 
 	private Boolean postIsDestroyed(Integer id) {
