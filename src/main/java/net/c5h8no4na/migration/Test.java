@@ -87,90 +87,97 @@ public class Test {
 		}
 		Post p = em.find(Post.class, id);
 		if (p == null) {
-			E621Response<PostApi> response = client.getPost(id);
-			if (response.getSuccess()) {
-				PostApi post = response.unwrap();
-				Post dbPost = new Post();
-				dbPost.setId(post.getId());
-				dbPost.setCreatedAt(new Timestamp(post.getCreatedAt().getTime()));
-				dbPost.setUpdatedAt(post.getUpdatedAt() == null ? null : new Timestamp(post.getUpdatedAt().getTime()));
-				dbPost.setWidth(post.getFile().getWidth());
-				dbPost.setHeight(post.getFile().getHeight());
-				dbPost.setExtension(Extension.from(post.getFile().getExt()).get());
-				dbPost.setSize(post.getFile().getSize());
-				dbPost.setMd5(post.getFile().getMd5());
-				dbPost.setScoreUp(post.getScore().getUp());
-				dbPost.setScoreDown(post.getScore().getDown());
-				dbPost.setScoreTotal(post.getScore().getTotal());
-				dbPost.setTags(findOrCreateTags(post.getTags().getAll()));
-				dbPost.setRating(Rating.from(post.getRating()).get());
-				dbPost.setFavCount(post.getFavCount());
-
-				if (post.getApproverId().isPresent()) {
-					dbPost.setApprover(findOrCreateUser(post.getApproverId().get(), dbPost));
-				}
-				dbPost.setUploader(findOrCreateUser(post.getUploaderId(), dbPost));
-				dbPost.setDescription(post.getDescription());
-				dbPost.setDuration(post.getDuration().orElse(null));
-
-				em.persist(dbPost);
-				// File
-				if (!post.getFlags().getDeleted()) {
-					Optional<byte[]> file = client.getFile(dbPost.getMd5(), dbPost.getExtension().toString().toLowerCase());
-					PostFile pf = new PostFile();
-					pf.setPost(dbPost);
-					pf.setFile(file.get());
-					em.persist(pf);
-					dbPost.setPostFile(pf);
-				}
-
-				// Children
-				List<Integer> childIds = post.getRelationships().getChildren();
-				List<Post> children = childIds.stream().map(childId -> findOrCreatePost(childId)).collect(Collectors.toList());
-				dbPost.setChildren(children);
-				for (String source : post.getSources()) {
-					Source s = new Source();
-					s.setPost(dbPost);
-					s.setSource(source);
-					em.persist(s);
-				}
-				return dbPost;
-			} else {
-				if (response.getResponseCode() == 404) {
-					DestroyedPost dp = new DestroyedPost();
-					dp.setId(id);
-					em.persist(dp);
-				}
-				return null;
-			}
-
+			return createPost(id);
 		} else {
 			return p;
+		}
+	}
+
+	private Post createPost(int id) {
+		E621Response<PostApi> response = client.getPost(id);
+		if (response.isSuccess()) {
+			PostApi post = response.unwrap();
+			Post dbPost = new Post();
+			dbPost.setId(post.getId());
+			dbPost.setCreatedAt(new Timestamp(post.getCreatedAt().getTime()));
+			dbPost.setUpdatedAt(post.getUpdatedAt() == null ? null : new Timestamp(post.getUpdatedAt().getTime()));
+			dbPost.setWidth(post.getFile().getWidth());
+			dbPost.setHeight(post.getFile().getHeight());
+			dbPost.setExtension(Extension.from(post.getFile().getExt()).get());
+			dbPost.setSize(post.getFile().getSize());
+			dbPost.setMd5(post.getFile().getMd5());
+			dbPost.setScoreUp(post.getScore().getUp());
+			dbPost.setScoreDown(post.getScore().getDown());
+			dbPost.setScoreTotal(post.getScore().getTotal());
+			dbPost.setTags(findOrCreateTags(post.getTags().getAll()));
+			dbPost.setRating(Rating.from(post.getRating()).get());
+			dbPost.setFavCount(post.getFavCount());
+
+			if (post.getApproverId().isPresent()) {
+				dbPost.setApprover(findOrCreateUser(post.getApproverId().get(), dbPost));
+			}
+			dbPost.setUploader(findOrCreateUser(post.getUploaderId(), dbPost));
+			dbPost.setDescription(post.getDescription());
+			dbPost.setDuration(post.getDuration().orElse(null));
+
+			em.persist(dbPost);
+			// File
+			if (!post.getFlags().isDeleted()) {
+				Optional<byte[]> file = client.getFile(dbPost.getMd5(), dbPost.getExtension().toString().toLowerCase());
+				PostFile pf = new PostFile();
+				pf.setPost(dbPost);
+				pf.setFile(file.get());
+				em.persist(pf);
+				dbPost.setPostFile(pf);
+			}
+
+			// Children
+			List<Integer> childIds = post.getRelationships().getChildren();
+			List<Post> children = childIds.stream().map(childId -> findOrCreatePost(childId)).collect(Collectors.toList());
+			dbPost.setChildren(children);
+			for (String source : post.getSources()) {
+				Source s = new Source();
+				s.setPost(dbPost);
+				s.setSource(source);
+				em.persist(s);
+			}
+			return dbPost;
+		} else {
+			if (response.getResponseCode() == 404) {
+				DestroyedPost dp = new DestroyedPost();
+				dp.setId(id);
+				em.persist(dp);
+			}
+			return null;
 		}
 	}
 
 	private User findOrCreateUser(Integer id, Post p) {
 		User u = em.find(User.class, id);
 		if (u == null) {
-			E621Response<FullUserApi> response = client.getUserById(id);
-			if (response.getSuccess()) {
-				FullUserApi user = response.unwrap();
-				User dbUser = new User();
-				dbUser.setId(user.getId());
-				dbUser.setCreatedAt(new Timestamp(user.getCreatedAt().getTime()));
-				dbUser.setName(user.getName());
-				dbUser.setLevel(Level.from(user.getLevel()).get());
-				dbUser.setIsBanned(user.getIsBanned());
-				em.persist(dbUser);
-				if (user.getAvatarId().isPresent()) {
-					dbUser.setAvatar(p.getId().equals(user.getAvatarId().get()) ? p : findOrCreatePost(user.getAvatarId().orElse(null)));
-				}
-				return dbUser;
-			} else {
-				return null;
-			}
+			return createUser(id, p);
 		} else {
 			return u;
+		}
+	}
+
+	private User createUser(int id, Post p) {
+		E621Response<FullUserApi> response = client.getUserById(id);
+		if (response.isSuccess()) {
+			FullUserApi user = response.unwrap();
+			User dbUser = new User();
+			dbUser.setId(user.getId());
+			dbUser.setCreatedAt(new Timestamp(user.getCreatedAt().getTime()));
+			dbUser.setName(user.getName());
+			dbUser.setLevel(Level.from(user.getLevel()).get());
+			dbUser.setIsBanned(user.getIsBanned());
+			em.persist(dbUser);
+			if (user.getAvatarId().isPresent()) {
+				dbUser.setAvatar(p.getId().equals(user.getAvatarId().get()) ? p : findOrCreatePost(user.getAvatarId().orElse(null)));
+			}
+			return dbUser;
+		} else {
+			return null;
 		}
 	}
 
@@ -202,6 +209,7 @@ public class Test {
 			}
 		}
 
+		// Does not work without it. Why?
 		em.flush();
 
 		return alreadyPersistedTags;
@@ -269,7 +277,7 @@ public class Test {
 		p.setUploaderId(post.getUploader().getId());
 		p.setDescription(post.getDescription());
 		p.setDuration(post.getDuration().orElse(null));
-		p.setSources(post.getSources().stream().map(source -> source.getSource()).collect(Collectors.toList()));
+		p.setSources(post.getSources().stream().map(source -> source.getUrl()).collect(Collectors.toList()));
 
 		return p;
 	}
