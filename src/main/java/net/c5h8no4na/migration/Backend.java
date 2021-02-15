@@ -20,6 +20,7 @@ import javax.persistence.criteria.CriteriaQuery;
 import javax.persistence.criteria.Root;
 import javax.sql.DataSource;
 
+import net.c5h8no4na.common.Hash;
 import net.c5h8no4na.common.Tuple;
 import net.c5h8no4na.common.assertion.Assert;
 import net.c5h8no4na.e621.api.E621Client;
@@ -131,12 +132,11 @@ public class Backend {
 			Assert.notNull(dbPost.getUploader());
 			dbPost.setDuration(post.getDuration().orElse(null));
 
-			// File
-			if (!post.getFlags().isDeleted()) {
-				Optional<byte[]> file = client.getFile(dbPost.getMd5(), dbPost.getExtension().toString().toLowerCase());
+			Optional<byte[]> fileToInsert = getFileFromWhereever(post);
+			if (fileToInsert.isPresent()) {
 				PostFile pf = new PostFile();
 				pf.setPost(dbPost);
-				pf.setFile(file.get());
+				pf.setFile(fileToInsert.get());
 				em.persist(pf);
 				dbPost.setPostFile(pf);
 			}
@@ -160,6 +160,22 @@ public class Backend {
 			}
 			return null;
 		}
+	}
+
+	private Optional<byte[]> getFileFromWhereever(PostApi post) {
+		Optional<byte[]> mariadbFile = getPostFromMariaDb(post.getId());
+		Optional<byte[]> fileToInsert = Optional.empty();
+		if (mariadbFile.isPresent()) {
+			String mariaDbMd5 = Hash.getMd5(mariadbFile.get());
+			if (post.getFile().getMd5().equals(mariaDbMd5)) {
+				fileToInsert = Optional.of(mariadbFile.get());
+			}
+		}
+		if (fileToInsert.isEmpty() && !post.getFlags().isDeleted()) {
+			Optional<byte[]> file = client.getFile(post.getFile().getMd5(), post.getFile().getExt());
+			fileToInsert = Optional.of(file.get());
+		}
+		return fileToInsert;
 	}
 
 	public User findOrCreateUser(Integer id) {
