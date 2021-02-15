@@ -112,15 +112,16 @@ public class Test {
 			dbPost.setTags(findOrCreateTags(post.getTags().getAll()));
 			dbPost.setRating(Rating.from(post.getRating()).get());
 			dbPost.setFavCount(post.getFavCount());
-
-			if (post.getApproverId().isPresent()) {
-				dbPost.setApprover(findOrCreateUser(post.getApproverId().get(), dbPost));
-			}
-			dbPost.setUploader(findOrCreateUser(post.getUploaderId(), dbPost));
 			dbPost.setDescription(post.getDescription());
+
+			// Why does it flush here?
+			em.persist(dbPost);
+			if (post.getApproverId().isPresent()) {
+				dbPost.setApprover(findOrCreateUser(post.getApproverId().get()));
+			}
+			dbPost.setUploader(findOrCreateUser(post.getUploaderId()));
 			dbPost.setDuration(post.getDuration().orElse(null));
 
-			em.persist(dbPost);
 			// File
 			if (!post.getFlags().isDeleted()) {
 				Optional<byte[]> file = client.getFile(dbPost.getMd5(), dbPost.getExtension().toString().toLowerCase());
@@ -152,16 +153,16 @@ public class Test {
 		}
 	}
 
-	private User findOrCreateUser(Integer id, Post p) {
+	private User findOrCreateUser(Integer id) {
 		User u = em.find(User.class, id);
 		if (u == null) {
-			return createUser(id, p);
+			return createUser(id);
 		} else {
 			return u;
 		}
 	}
 
-	private User createUser(int id, Post p) {
+	private User createUser(int id) {
 		E621Response<FullUserApi> response = client.getUserById(id);
 		if (response.isSuccess()) {
 			FullUserApi user = response.unwrap();
@@ -172,9 +173,7 @@ public class Test {
 			dbUser.setLevel(Level.from(user.getLevel()).get());
 			dbUser.setIsBanned(user.getIsBanned());
 			em.persist(dbUser);
-			if (user.getAvatarId().isPresent()) {
-				dbUser.setAvatar(p.getId().equals(user.getAvatarId().get()) ? p : findOrCreatePost(user.getAvatarId().orElse(null)));
-			}
+			dbUser.setAvatar(findOrCreatePost(user.getAvatarId().orElse(null)));
 			return dbUser;
 		} else {
 			return null;
@@ -208,9 +207,6 @@ public class Test {
 				alreadyPersistedTags.add(dbTag);
 			}
 		}
-
-		// Does not work without it. Why?
-		em.flush();
 
 		return alreadyPersistedTags;
 	}
