@@ -52,7 +52,7 @@ public class Test {
 		if (file.isEmpty()) {
 			return Response.serverError().status(Status.NOT_FOUND).build();
 		} else {
-			return Response.ok(file.get().x).type(file.get().y.toMediaType()).build();
+			return Response.ok(file.get().x).type(file.get().y.getMediaType()).build();
 		}
 	}
 
