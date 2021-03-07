@@ -8,10 +8,11 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 import javax.annotation.Resource;
-import javax.ejb.Stateless;
+import javax.inject.Singleton;
 import javax.persistence.EntityManager;
 import javax.persistence.PersistenceContext;
 import javax.persistence.TypedQuery;
@@ -40,8 +41,9 @@ import net.c5h8no4na.entity.e621.enums.Level;
 import net.c5h8no4na.entity.e621.enums.Rating;
 import net.c5h8no4na.entity.e621.enums.TagType;
 
-@Stateless
+@Singleton
 public class Backend {
+	private static final Logger LOG = Logger.getLogger(Backend.class.getCanonicalName());
 
 	@PersistenceContext(unitName = "e621")
 	private EntityManager em;
@@ -50,6 +52,28 @@ public class Backend {
 	private DataSource mariaDb;
 
 	private E621Client client = new E621Client("earlopain/test");
+
+	public Post migrateFromMaria(int id) throws SQLException {
+		Post p = findOrCreatePost(id);
+		if (postIsDestroyed(id) || p != null) {
+			deleteFromMariaDb(id);
+		}
+		return p;
+	}
+
+	public Integer mariaDbGetLowestId() throws SQLException {
+		try (Connection connection = mariaDb.getConnection();
+				PreparedStatement statement = connection.prepareStatement("SELECT id FROM posts ORDER BY id ASC LIMIT 1")) {
+			ResultSet rs = statement.executeQuery();
+			if (rs.next()) {
+				return rs.getInt(1);
+			} else {
+				return null;
+			}
+		} catch (SQLException e) {
+			throw e;
+		}
+	}
 
 	public Post findOrCreatePost(Integer id) {
 		if (id == null || postIsDestroyed(id)) {
@@ -95,11 +119,23 @@ public class Backend {
 			}
 		} catch (SQLException e) {
 			// Some other error
+			e.printStackTrace();
 			return Optional.empty();
 		}
 	}
 
-	private Boolean postIsDestroyed(Integer id) {
+	public void deleteFromMariaDb(int id) throws SQLException {
+		try (Connection connection = mariaDb.getConnection();
+				PreparedStatement statement = connection.prepareStatement("DELETE FROM posts WHERE id = ?")) {
+			statement.setInt(1, id);
+			statement.execute();
+			LOG.info("Deleted " + id + " from mariadb");
+		} catch (SQLException e) {
+			throw e;
+		}
+	}
+
+	private boolean postIsDestroyed(Integer id) {
 		return em.find(DestroyedPost.class, id) != null;
 	}
 

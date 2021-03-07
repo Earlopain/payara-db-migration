@@ -5,10 +5,12 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLConnection;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import javax.ejb.Stateless;
 import javax.inject.Inject;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -32,6 +34,7 @@ import net.c5h8no4na.entity.e621.Tag;
 import net.c5h8no4na.entity.e621.enums.Extension;
 import net.c5h8no4na.entity.e621.enums.TagType;
 
+@Stateless
 @Path("/")
 public class Test {
 
@@ -40,7 +43,23 @@ public class Test {
 
 	@GET
 	@Produces(MediaType.APPLICATION_JSON)
-	public String test(@QueryParam("id") Integer id) {
+	@Path("migrate")
+	public String migrate(@QueryParam("id") int id) throws SQLException {
+		Gson gson = new GsonBuilder().serializeNulls().create();
+		return gson.toJson(postToApiPost(backend.migrateFromMaria(id)));
+	}
+
+	@GET
+	@Produces(MediaType.APPLICATION_JSON)
+	@Path("mariaDbLowest")
+	public Integer mariaDbLowest(@QueryParam("id") int id) throws SQLException {
+		return backend.mariaDbGetLowestId();
+	}
+
+	@GET
+	@Produces(MediaType.APPLICATION_JSON)
+	@Path("get")
+	public String test(@QueryParam("id") int id) {
 		Gson gson = new GsonBuilder().serializeNulls().create();
 		return gson.toJson(postToApiPost(backend.findOrCreatePost(id)));
 	}
