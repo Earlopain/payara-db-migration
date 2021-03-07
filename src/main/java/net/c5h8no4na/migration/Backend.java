@@ -55,8 +55,9 @@ public class Backend {
 
 	public Post migrateFromMaria(int id) throws SQLException {
 		Post p = findOrCreatePost(id);
-		if (postIsDestroyed(id) || p != null) {
-			deleteFromMariaDb(id);
+		boolean isDestroyed = postIsDestroyed(id);
+		if (isDestroyed || p != null) {
+			deleteFromMariaDb(id, isDestroyed);
 		}
 		return p;
 	}
@@ -124,7 +125,29 @@ public class Backend {
 		}
 	}
 
-	public void deleteFromMariaDb(int id) throws SQLException {
+	public void deleteFromMariaDb(int id, boolean isDestroyed) throws SQLException {
+
+		if (isDestroyed) {
+			try (Connection connection = mariaDb.getConnection();
+					PreparedStatement statement = connection.prepareStatement("SELECT file FROM posts WHERE id = ?");
+					PreparedStatement statement2 = connection.prepareStatement("INSERT INTO destroyed (id, file) VALUES (?, ?)")) {
+				statement.setInt(1, id);
+				ResultSet rs = statement.executeQuery();
+				if (rs.next()) {
+					byte[] file = rs.getBytes(1);
+					if (file != null) {
+						statement2.setInt(1, id);
+						statement2.setBytes(2, file);
+						statement2.execute();
+					}
+
+				}
+				LOG.info("Deleted " + id + " from mariadb");
+			} catch (SQLException e) {
+				throw e;
+			}
+		}
+
 		try (Connection connection = mariaDb.getConnection();
 				PreparedStatement statement = connection.prepareStatement("DELETE FROM posts WHERE id = ?")) {
 			statement.setInt(1, id);
