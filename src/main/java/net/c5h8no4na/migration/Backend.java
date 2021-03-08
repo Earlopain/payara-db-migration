@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import javax.annotation.Resource;
 import javax.inject.Singleton;
@@ -63,6 +64,27 @@ public class Backend {
 		return p;
 	}
 
+	public void migrateFromMariaRange(int startId) throws SQLException, InterruptedException, IOException {
+		List<Integer> ids = IntStream.range(startId, startId + 100).boxed().collect(Collectors.toList());
+		List<PostApi> posts = client.getPosts(ids).unwrap();
+
+		for (Integer id : ids) {
+			Optional<PostApi> post = posts.stream().filter(p -> p.getId().equals(id)).findFirst();
+			if (post.isEmpty()) {
+				LOG.info(id + " is destroyed");
+				createDestroyed(id);
+				deleteFromMariaDb(id, true);
+			} else {
+				findOrCreatePost(post.get());
+				deleteFromMariaDb(id, false);
+			}
+			// send to db an clear refenreces in the em, Posts can have large blobs
+			// associated with them, no need to fill the heap with that
+			em.flush();
+			em.clear();
+		}
+	}
+
 	public Integer mariaDbGetLowestId() throws SQLException {
 		try (Connection connection = mariaDb.getConnection();
 				PreparedStatement statement = connection.prepareStatement("SELECT id FROM posts ORDER BY id ASC LIMIT 1")) {
@@ -84,6 +106,18 @@ public class Backend {
 		Post p = em.find(Post.class, id);
 		if (p == null) {
 			return createPost(id);
+		} else {
+			return p;
+		}
+	}
+
+	public Post findOrCreatePost(PostApi post) throws InterruptedException, IOException {
+		if (postIsDestroyed(post.getId())) {
+			return null;
+		}
+		Post p = em.find(Post.class, post.getId());
+		if (p == null) {
+			return createPost(post);
 		} else {
 			return p;
 		}
@@ -143,7 +177,7 @@ public class Backend {
 					}
 
 				}
-				LOG.info("Deleted " + id + " from mariadb");
+				LOG.info("Saved destroyed  " + id);
 			} catch (SQLException e) {
 				throw e;
 			}
@@ -167,63 +201,71 @@ public class Backend {
 		E621Response<PostApi> response = client.getPost(id);
 		if (response.isSuccess()) {
 			PostApi post = response.unwrap();
-			Post dbPost = new Post();
-			dbPost.setId(post.getId());
-			dbPost.setCreatedAt(new Timestamp(post.getCreatedAt().getTime()));
-			dbPost.setUpdatedAt(post.getUpdatedAt() == null ? null : new Timestamp(post.getUpdatedAt().getTime()));
-			dbPost.setWidth(post.getFile().getWidth());
-			dbPost.setHeight(post.getFile().getHeight());
-			dbPost.setExtension(Extension.from(post.getFile().getExt()).get());
-			dbPost.setSize(post.getFile().getSize());
-			dbPost.setMd5(post.getFile().getMd5());
-			dbPost.setScoreUp(post.getScore().getUp());
-			dbPost.setScoreDown(post.getScore().getDown());
-			dbPost.setScoreTotal(post.getScore().getTotal());
-			dbPost.setTags(findOrCreateTags(post.getTags().getAll()));
-			dbPost.setRating(Rating.from(post.getRating()).get());
-			dbPost.setFavCount(post.getFavCount());
-			dbPost.setDescription(post.getDescription());
-
-			em.persist(dbPost);
-			if (post.getApproverId().isPresent()) {
-				dbPost.setApprover(findOrCreateUser(post.getApproverId().get()));
-			}
-			dbPost.setUploader(findOrCreateUser(post.getUploaderId()));
-			Assert.notNull(dbPost.getUploader());
-			dbPost.setDuration(post.getDuration().orElse(null));
-
-			Optional<byte[]> fileToInsert = getFileFromWhereever(post);
-			if (fileToInsert.isPresent()) {
-				PostFile pf = new PostFile();
-				pf.setPost(dbPost);
-				pf.setFile(fileToInsert.get());
-				em.persist(pf);
-				dbPost.setPostFile(pf);
-			}
-
-			// Children
-			List<Post> children = new ArrayList<>();
-
-			for (Integer childId : post.getRelationships().getChildren()) {
-				children.add(findOrCreatePost(childId));
-			}
-
-			dbPost.setChildren(children);
-			for (String source : post.getSources()) {
-				Source s = new Source();
-				s.setPost(dbPost);
-				s.setSource(source);
-				em.persist(s);
-			}
-			return dbPost;
+			return createPost(post);
 		} else {
 			if (response.getResponseCode() == 404) {
-				DestroyedPost dp = new DestroyedPost();
-				dp.setId(id);
-				em.persist(dp);
+				createDestroyed(id);
 			}
 			return null;
 		}
+	}
+
+	private Post createPost(PostApi post) throws InterruptedException, IOException {
+		Post dbPost = new Post();
+		dbPost.setId(post.getId());
+		dbPost.setCreatedAt(new Timestamp(post.getCreatedAt().getTime()));
+		dbPost.setUpdatedAt(post.getUpdatedAt() == null ? null : new Timestamp(post.getUpdatedAt().getTime()));
+		dbPost.setWidth(post.getFile().getWidth());
+		dbPost.setHeight(post.getFile().getHeight());
+		dbPost.setExtension(Extension.from(post.getFile().getExt()).get());
+		dbPost.setSize(post.getFile().getSize());
+		dbPost.setMd5(post.getFile().getMd5());
+		dbPost.setScoreUp(post.getScore().getUp());
+		dbPost.setScoreDown(post.getScore().getDown());
+		dbPost.setScoreTotal(post.getScore().getTotal());
+		dbPost.setTags(findOrCreateTags(post.getTags().getAll()));
+		dbPost.setRating(Rating.from(post.getRating()).get());
+		dbPost.setFavCount(post.getFavCount());
+		dbPost.setDescription(post.getDescription());
+
+		em.persist(dbPost);
+		if (post.getApproverId().isPresent()) {
+			dbPost.setApprover(findOrCreateUser(post.getApproverId().get()));
+		}
+		dbPost.setUploader(findOrCreateUser(post.getUploaderId()));
+		Assert.notNull(dbPost.getUploader());
+		dbPost.setDuration(post.getDuration().orElse(null));
+
+		Optional<byte[]> fileToInsert = getFileFromWhereever(post);
+		if (fileToInsert.isPresent()) {
+			PostFile pf = new PostFile();
+			pf.setPost(dbPost);
+			pf.setFile(fileToInsert.get());
+			em.persist(pf);
+			dbPost.setPostFile(pf);
+		}
+
+		// Children
+		List<Post> children = new ArrayList<>();
+
+		for (Integer childId : post.getRelationships().getChildren()) {
+			children.add(findOrCreatePost(childId));
+		}
+
+		dbPost.setChildren(children);
+		for (String source : post.getSources()) {
+			Source s = new Source();
+			s.setPost(dbPost);
+			s.setSource(source);
+			em.persist(s);
+		}
+		return dbPost;
+	}
+
+	private void createDestroyed(int id) {
+		DestroyedPost dp = new DestroyedPost();
+		dp.setId(id);
+		em.persist(dp);
 	}
 
 	private Optional<byte[]> getFileFromWhereever(PostApi post) throws InterruptedException, IOException {

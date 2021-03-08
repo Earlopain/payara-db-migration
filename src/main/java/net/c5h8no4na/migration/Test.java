@@ -45,8 +45,16 @@ public class Test {
 	@Produces(MediaType.APPLICATION_JSON)
 	@Path("migrate")
 	public String migrate(@QueryParam("id") int id) throws SQLException, InterruptedException, IOException {
-		Gson gson = new GsonBuilder().serializeNulls().create();
-		return gson.toJson(postToApiPost(backend.migrateFromMaria(id)));
+		backend.migrateFromMaria(id);
+		return "{}";
+	}
+
+	@GET
+	@Produces(MediaType.APPLICATION_JSON)
+	@Path("migrateRange")
+	public String migrateRange(@QueryParam("startId") int startId) throws SQLException, InterruptedException, IOException {
+		backend.migrateFromMariaRange(startId);
+		return "{}";
 	}
 
 	@GET
