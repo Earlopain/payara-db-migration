@@ -1,5 +1,6 @@
 package net.c5h8no4na.migration;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -53,7 +54,7 @@ public class Backend {
 
 	private E621Client client = new E621Client("earlopain/test");
 
-	public Post migrateFromMaria(int id) throws SQLException {
+	public Post migrateFromMaria(int id) throws SQLException, InterruptedException, IOException {
 		Post p = findOrCreatePost(id);
 		boolean isDestroyed = postIsDestroyed(id);
 		if (isDestroyed || p != null) {
@@ -76,7 +77,7 @@ public class Backend {
 		}
 	}
 
-	public Post findOrCreatePost(Integer id) {
+	public Post findOrCreatePost(Integer id) throws InterruptedException, IOException {
 		if (id == null || postIsDestroyed(id)) {
 			return null;
 		}
@@ -162,7 +163,7 @@ public class Backend {
 		return em.find(DestroyedPost.class, id) != null;
 	}
 
-	private Post createPost(int id) {
+	private Post createPost(int id) throws InterruptedException, IOException {
 		E621Response<PostApi> response = client.getPost(id);
 		if (response.isSuccess()) {
 			PostApi post = response.unwrap();
@@ -201,8 +202,12 @@ public class Backend {
 			}
 
 			// Children
-			List<Integer> childIds = post.getRelationships().getChildren();
-			List<Post> children = childIds.stream().map(childId -> findOrCreatePost(childId)).collect(Collectors.toList());
+			List<Post> children = new ArrayList<>();
+
+			for (Integer childId : post.getRelationships().getChildren()) {
+				children.add(findOrCreatePost(childId));
+			}
+
 			dbPost.setChildren(children);
 			for (String source : post.getSources()) {
 				Source s = new Source();
@@ -221,7 +226,7 @@ public class Backend {
 		}
 	}
 
-	private Optional<byte[]> getFileFromWhereever(PostApi post) {
+	private Optional<byte[]> getFileFromWhereever(PostApi post) throws InterruptedException, IOException {
 		Optional<byte[]> mariadbFile = getPostFromMariaDb(post.getId());
 		Optional<byte[]> fileToInsert = Optional.empty();
 		if (mariadbFile.isPresent()) {
@@ -237,7 +242,7 @@ public class Backend {
 		return fileToInsert;
 	}
 
-	public User findOrCreateUser(Integer id) {
+	public User findOrCreateUser(Integer id) throws InterruptedException, IOException {
 		User u = em.find(User.class, id);
 		if (u == null) {
 			return createUser(id);
@@ -246,7 +251,7 @@ public class Backend {
 		}
 	}
 
-	private User createUser(int id) {
+	private User createUser(int id) throws InterruptedException, IOException {
 		E621Response<FullUserApi> response = client.getUserById(id);
 		if (response.isSuccess()) {
 			FullUserApi user = response.unwrap();
@@ -264,7 +269,7 @@ public class Backend {
 		}
 	}
 
-	private List<Tag> findOrCreateTags(List<String> tags) {
+	private List<Tag> findOrCreateTags(List<String> tags) throws InterruptedException {
 		List<Tag> alreadyPersistedTags = getTagsByName(tags);
 
 		for (Tag tag : alreadyPersistedTags) {
