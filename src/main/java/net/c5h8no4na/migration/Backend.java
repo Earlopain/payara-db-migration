@@ -99,7 +99,7 @@ public class Backend {
 		}
 	}
 
-	public Post findOrCreatePost(Integer id) throws InterruptedException, IOException {
+	public Post findOrCreatePost(Integer id) throws InterruptedException, IOException, SQLException {
 		if (id == null || postIsDestroyed(id)) {
 			return null;
 		}
@@ -111,7 +111,7 @@ public class Backend {
 		}
 	}
 
-	public Post findOrCreatePost(PostApi post) throws InterruptedException, IOException {
+	public Post findOrCreatePost(PostApi post) throws InterruptedException, IOException, SQLException {
 		if (postIsDestroyed(post.getId())) {
 			return null;
 		}
@@ -135,7 +135,7 @@ public class Backend {
 		return Optional.of(new Tuple<>(pf.get().getFile(), p.getExtension()));
 	}
 
-	public Optional<byte[]> getPostFromMariaDb(Integer id) {
+	public Optional<byte[]> getPostFromMariaDb(Integer id) throws SQLException {
 		try (Connection connection = mariaDb.getConnection();
 				PreparedStatement statement = connection.prepareStatement("SELECT file FROM posts WHERE id = ?")) {
 			statement.setInt(1, id);
@@ -154,32 +154,25 @@ public class Backend {
 				return Optional.empty();
 			}
 		} catch (SQLException e) {
-			// Some other error
-			e.printStackTrace();
-			return Optional.empty();
+			throw e;
 		}
 	}
 
 	public void deleteFromMariaDb(int id, boolean isDestroyed) throws SQLException {
 
 		if (isDestroyed) {
-			try (Connection connection = mariaDb.getConnection();
-					PreparedStatement statement = connection.prepareStatement("SELECT file FROM posts WHERE id = ?");
-					PreparedStatement statement2 = connection.prepareStatement("INSERT INTO destroyed (id, file) VALUES (?, ?)")) {
-				statement.setInt(1, id);
-				ResultSet rs = statement.executeQuery();
-				if (rs.next()) {
-					byte[] file = rs.getBytes(1);
-					if (file != null) {
-						statement2.setInt(1, id);
-						statement2.setBytes(2, file);
-						statement2.execute();
-					}
-
+			Optional<byte[]> file = getPostFromMariaDb(id);
+			if (file.isPresent()) {
+				try (Connection connection = mariaDb.getConnection();
+						PreparedStatement statement = connection.prepareStatement("INSERT INTO destroyed (id, file) VALUES (?, ?)")) {
+					statement.setInt(1, id);
+					statement.setBytes(2, file.get());
+					statement.execute();
+					LOG.info("Saved destroyed  " + id);
+				} catch (SQLException e) {
+					throw e;
 				}
-				LOG.info("Saved destroyed  " + id);
-			} catch (SQLException e) {
-				throw e;
+
 			}
 		}
 
@@ -197,7 +190,7 @@ public class Backend {
 		return em.find(DestroyedPost.class, id) != null;
 	}
 
-	private Post createPost(int id) throws InterruptedException, IOException {
+	private Post createPost(int id) throws InterruptedException, IOException, SQLException {
 		E621Response<PostApi> response = client.getPost(id);
 		if (response.isSuccess()) {
 			PostApi post = response.unwrap();
@@ -210,7 +203,7 @@ public class Backend {
 		}
 	}
 
-	private Post createPost(PostApi post) throws InterruptedException, IOException {
+	private Post createPost(PostApi post) throws InterruptedException, IOException, SQLException {
 		Post dbPost = new Post();
 		dbPost.setId(post.getId());
 		dbPost.setCreatedAt(new Timestamp(post.getCreatedAt().getTime()));
@@ -268,7 +261,7 @@ public class Backend {
 		em.persist(dp);
 	}
 
-	private Optional<byte[]> getFileFromWhereever(PostApi post) throws InterruptedException, IOException {
+	private Optional<byte[]> getFileFromWhereever(PostApi post) throws InterruptedException, IOException, SQLException {
 		Optional<byte[]> mariadbFile = getPostFromMariaDb(post.getId());
 		Optional<byte[]> fileToInsert = Optional.empty();
 		if (mariadbFile.isPresent()) {
@@ -284,7 +277,7 @@ public class Backend {
 		return fileToInsert;
 	}
 
-	public User findOrCreateUser(Integer id) throws InterruptedException, IOException {
+	public User findOrCreateUser(Integer id) throws InterruptedException, IOException, SQLException {
 		User u = em.find(User.class, id);
 		if (u == null) {
 			return createUser(id);
@@ -293,7 +286,7 @@ public class Backend {
 		}
 	}
 
-	private User createUser(int id) throws InterruptedException, IOException {
+	private User createUser(int id) throws InterruptedException, IOException, SQLException {
 		E621Response<FullUserApi> response = client.getUserById(id);
 		if (response.isSuccess()) {
 			FullUserApi user = response.unwrap();

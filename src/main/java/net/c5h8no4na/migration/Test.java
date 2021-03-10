@@ -67,7 +67,7 @@ public class Test {
 	@GET
 	@Produces(MediaType.APPLICATION_JSON)
 	@Path("get")
-	public String test(@QueryParam("id") int id) throws InterruptedException, IOException {
+	public String test(@QueryParam("id") int id) throws InterruptedException, IOException, SQLException {
 		Gson gson = new GsonBuilder().serializeNulls().create();
 		return gson.toJson(postToApiPost(backend.findOrCreatePost(id)));
 	}
@@ -85,7 +85,7 @@ public class Test {
 
 	@GET
 	@Path("/filemaria")
-	public Response getFileFromMariaDb(@QueryParam("id") Integer id) throws IOException {
+	public Response getFileFromMariaDb(@QueryParam("id") Integer id) throws IOException, SQLException {
 		Optional<byte[]> file = backend.getPostFromMariaDb(id);
 		if (file.isEmpty()) {
 			return Response.serverError().status(Status.NOT_FOUND).build();
