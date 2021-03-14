@@ -75,7 +75,19 @@ public class Backend {
 				createDestroyed(id);
 				deleteFromMariaDb(id, true);
 			} else {
-				findOrCreatePost(post.get());
+				Post p = findOrCreatePost(post.get());
+				if (p.getPostFile().isEmpty()) {
+					Optional<byte[]> mariaDbFile = getPostFromMariaDb(p.getId());
+					// File not in postgres, but mariadb, insert
+					if (mariaDbFile.isPresent()) {
+						LOG.info("Got file from mariadb for existing post " + p.getId());
+						PostFile pf = new PostFile();
+						pf.setPost(p);
+						pf.setFile(mariaDbFile.get());
+						em.persist(pf);
+						p.setPostFile(pf);
+					}
+				}
 				deleteFromMariaDb(id, false);
 			}
 			// send to db an clear refenreces in the em, Posts can have large blobs
