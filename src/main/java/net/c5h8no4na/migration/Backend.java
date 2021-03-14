@@ -304,7 +304,7 @@ public class Backend {
 		}
 	}
 
-	private List<Tag> findOrCreateTags(List<String> tags) throws InterruptedException {
+	private List<Tag> findOrCreateTags(List<String> tags) throws InterruptedException, IOException {
 		List<Tag> alreadyPersistedTags = getTagsByName(tags);
 
 		for (Tag tag : alreadyPersistedTags) {
