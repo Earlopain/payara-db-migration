@@ -52,8 +52,9 @@ public class Test {
 	@GET
 	@Produces(MediaType.APPLICATION_JSON)
 	@Path("migrateRange")
-	public String migrateRange(@QueryParam("startId") int startId) throws SQLException, InterruptedException, IOException {
-		backend.migrateFromMariaRange(startId);
+	public String migrateRange(@QueryParam("startId") int startId, @QueryParam("stepSize") int stepSize)
+			throws SQLException, InterruptedException, IOException {
+		backend.migrateFromMariaRange(startId, stepSize);
 		return "{}";
 	}
 

@@ -64,8 +64,8 @@ public class Backend {
 		return p;
 	}
 
-	public void migrateFromMariaRange(int startId) throws SQLException, InterruptedException, IOException {
-		List<Integer> ids = IntStream.range(startId, startId + 100).boxed().collect(Collectors.toList());
+	public void migrateFromMariaRange(int startId, int stepSize) throws SQLException, InterruptedException, IOException {
+		List<Integer> ids = IntStream.range(startId, startId + stepSize).boxed().collect(Collectors.toList());
 		List<PostApi> posts = client.getPosts(ids).unwrap();
 
 		for (Integer id : ids) {
